@@ -120,6 +120,20 @@ class FileTrackerApp {
                 e.preventDefault();
             }
         });
+
+        // Window controls
+        document.getElementById('minimizeBtn')?.addEventListener('click', () => {
+            window.electronAPI.window.minimize();
+        });
+        document.getElementById('maximizeBtn')?.addEventListener('click', () => {
+            window.electronAPI.window.maximize();
+        });
+        document.getElementById('closeBtn')?.addEventListener('click', () => {
+            window.electronAPI.window.close();
+        });
+
+        // Menu bar functionality
+        this.setupMenuBarEvents();
     }
 
     setupFileUpload() {
@@ -460,6 +474,27 @@ class FileTrackerApp {
         this.selectedFile = null;
         document.getElementById('selectedFile').classList.add('hidden');
 
+        // Ensure all form inputs are enabled
+        const formInputs = [
+            'titleInput',
+            'refInput',
+            'descInput',
+            'dateReceivedInput',
+            'dateSentInput',
+            'tagsInput',
+            'masterFileSelect'
+        ];
+
+        formInputs.forEach(inputId => {
+            const element = document.getElementById(inputId);
+            if (element) {
+                element.disabled = false;
+                element.readOnly = false;
+                element.style.pointerEvents = 'auto';
+                element.style.opacity = '1';
+            }
+        });
+
         // Hide upload section for editing
         document.getElementById('uploadSection').style.display = this.isEditing ? 'none' : 'block';
 
@@ -487,6 +522,22 @@ class FileTrackerApp {
 
         // Reset form
         document.getElementById('masterFileForm').reset();
+
+        // Ensure all form inputs are enabled
+        const formInputs = [
+            'masterFileNameInput',
+            'masterFileDescInput'
+        ];
+
+        formInputs.forEach(inputId => {
+            const element = document.getElementById(inputId);
+            if (element) {
+                element.disabled = false;
+                element.readOnly = false;
+                element.style.pointerEvents = 'auto';
+                element.style.opacity = '1';
+            }
+        });
 
         if (masterFile) {
             document.getElementById('masterFileNameInput').value = masterFile.name || '';
@@ -896,6 +947,103 @@ class FileTrackerApp {
         document.getElementById('masterFilesPrevBtn')?.addEventListener('click', () => this.goToPage('masterFiles', this.pagination.masterFiles.page - 1));
         document.getElementById('masterFilesNextBtn')?.addEventListener('click', () => this.goToPage('masterFiles', this.pagination.masterFiles.page + 1));
         document.getElementById('masterFilesPageSize')?.addEventListener('change', (e) => this.changePageSize('masterFiles', e.target.value));
+    }
+
+    setupMenuBarEvents() {
+        // File Menu
+        document.getElementById('newFileMenu')?.addEventListener('click', async () => {
+            await this.navigateToPage('add-file');
+        });
+        document.getElementById('newMasterFileMenu')?.addEventListener('click', async () => {
+            await this.navigateToPage('add-master-file');
+        });
+        document.getElementById('openFileMenu')?.addEventListener('click', () => {
+            // Focus search input
+            document.getElementById('globalSearch')?.focus();
+        });
+        document.getElementById('exportDataMenu')?.addEventListener('click', () => {
+            this.exportData();
+        });
+        document.getElementById('importDataMenu')?.addEventListener('click', () => {
+            this.importData();
+        });
+        document.getElementById('exitMenu')?.addEventListener('click', () => {
+            window.electronAPI.window.close();
+        });
+
+        // Edit Menu
+        document.getElementById('searchMenu')?.addEventListener('click', () => {
+            document.getElementById('globalSearch')?.focus();
+        });
+        document.getElementById('clearSearchMenu')?.addEventListener('click', () => {
+            this.clearSearch();
+        });
+        document.getElementById('selectAllMenu')?.addEventListener('click', () => {
+            // This would need to be implemented based on current page context
+            console.log('Select All not implemented yet');
+        });
+
+        // View Menu
+        document.getElementById('dashboardViewMenu')?.addEventListener('click', async () => {
+            await this.navigateToPage('dashboard');
+        });
+        document.getElementById('documentsViewMenu')?.addEventListener('click', async () => {
+            await this.navigateToPage('documents');
+        });
+        document.getElementById('masterFilesViewMenu')?.addEventListener('click', async () => {
+            await this.navigateToPage('master-files');
+        });
+        document.getElementById('backupViewMenu')?.addEventListener('click', async () => {
+            await this.navigateToPage('backup-restore');
+        });
+        document.getElementById('toggleThemeMenu')?.addEventListener('click', () => {
+            this.toggleTheme();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // File shortcuts
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    this.navigateToPage('add-master-file');
+                } else {
+                    this.navigateToPage('add-file');
+                }
+            }
+            // Search shortcuts
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    this.clearSearch();
+                } else {
+                    document.getElementById('globalSearch')?.focus();
+                }
+            }
+            // Export/Import shortcuts
+            if (e.ctrlKey && e.key === 'e') {
+                e.preventDefault();
+                this.exportData();
+            }
+            if (e.ctrlKey && e.key === 'i') {
+                e.preventDefault();
+                this.importData();
+            }
+            // Theme toggle
+            if (e.ctrlKey && e.key === 't') {
+                e.preventDefault();
+                this.toggleTheme();
+            }
+            // View shortcuts
+            if (e.key >= 'F1' && e.key <= 'F4') {
+                e.preventDefault();
+                const pages = ['dashboard', 'documents', 'master-files', 'backup-restore'];
+                const index = parseInt(e.key.substring(1)) - 1;
+                if (index >= 0 && index < pages.length) {
+                    this.navigateToPage(pages[index]);
+                }
+            }
+        });
     }
 
     async goToPage(pageType, pageNumber) {

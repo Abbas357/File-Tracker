@@ -47,5 +47,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: () => ipcRenderer.invoke('files:exportBackup'),
     restore: (options) => ipcRenderer.invoke('files:importBackup', options),
     getStats: () => ipcRenderer.invoke('storage:getStats')
+  },
+
+  // Window controls
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized')
   }
 });
