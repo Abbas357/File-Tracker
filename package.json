@@ -1,0 +1,61 @@
+{
+  "name": "file-tracker",
+  "version": "1.0.0",
+  "description": "Electron desktop application for tracking files and letters with SQLite and file storage",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
+    "build": "electron-builder",
+    "build:win": "npm run clean && electron-builder --win",
+    "build:mac": "npm run clean && electron-builder --mac",
+    "build:linux": "npm run clean && electron-builder --linux",
+    "build:dir": "npm run clean && electron-builder --dir"
+  },
+  "keywords": [
+    "electron",
+    "file-tracker",
+    "sqlite",
+    "document-management"
+  ],
+  "author": "File Tracker App",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "rimraf": "^6.0.1"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "extract-zip": "^2.0.1",
+    "sql.js": "^1.10.3"
+  },
+  "build": {
+    "appId": "com.filetracker.app",
+    "productName": "File Tracker",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    },
+    "removePackageScripts": true,
+    "removePackageKeywords": true
+  }
+}
