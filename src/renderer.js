@@ -22,8 +22,21 @@ class FileTrackerApp {
     async initializeApp() {
         this.bindEvents();
         await this.loadMasterFiles();
-        await this.loadFiles();
+        await this.loadDashboardData();
         this.loadTheme();
+
+        // Hide loading screen once app is initialized
+        this.hideLoadingScreen();
+    }
+
+    hideLoadingScreen() {
+        const loadingScreen = document.getElementById('loadingScreen');
+        if (loadingScreen) {
+            loadingScreen.classList.add('fade-out');
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+            }, 500);
+        }
     }
 
     bindEvents() {
@@ -100,12 +113,17 @@ class FileTrackerApp {
         // Pagination event handlers
         this.setupPaginationEvents();
 
+        // Dashboard functionality
+        document.getElementById('refreshDashboardBtn')?.addEventListener('click', () => this.loadDashboardData());
+        document.getElementById('dashAddFileBtn')?.addEventListener('click', async () => await this.navigateToPage('add-file'));
+        document.getElementById('dashAddMasterFileBtn')?.addEventListener('click', async () => await this.navigateToPage('add-master-file'));
+        document.getElementById('dashViewAllDocsBtn')?.addEventListener('click', async () => await this.navigateToPage('documents'));
+        document.getElementById('dashBackupBtn')?.addEventListener('click', async () => await this.navigateToPage('backup-restore'));
+
         // Backup and restore functionality
         document.getElementById('refreshStatsBtn')?.addEventListener('click', () => this.loadStorageStats());
-        document.getElementById('exportDataBtn')?.addEventListener('click', () => this.exportData());
-        document.getElementById('importDataBtn')?.addEventListener('click', () => this.importData());
-        document.getElementById('createBackupBtn')?.addEventListener('click', () => this.createBackup());
-        document.getElementById('restoreBackupBtn')?.addEventListener('click', () => this.restoreBackup());
+        document.getElementById('createBackupBtn')?.addEventListener('click', () => this.createCompleteBackup());
+        document.getElementById('restoreBackupBtn')?.addEventListener('click', () => this.restoreCompleteBackup());
 
         // Global drag and drop prevention (but allow normal interactions)
         document.addEventListener('dragover', (e) => {
@@ -207,7 +225,9 @@ class FileTrackerApp {
         this.currentPage = page;
 
         // Load page-specific data
-        if (page === 'documents') {
+        if (page === 'dashboard') {
+            this.loadDashboardData();
+        } else if (page === 'documents') {
             this.loadDocumentsPage();
         } else if (page === 'master-files') {
             this.loadMasterFilesPage();
@@ -249,7 +269,7 @@ class FileTrackerApp {
 
     async loadDocumentsPage() {
         try {
-            this.showLoading('documentsFilesList');
+            this.showLoading('filesList');
 
             const params = {
                 page: this.pagination.documents.page,
@@ -264,7 +284,7 @@ class FileTrackerApp {
                 ...result.pagination
             };
 
-            this.renderFilesList('documentsFilesList', result.data);
+            this.renderFilesList('filesList', result.data);
             this.renderPagination('documents');
         } catch (error) {
             this.showMessage('Failed to load documents: ' + error.message, 'error');
@@ -302,6 +322,138 @@ class FileTrackerApp {
             this.renderPagination('masterFiles');
         } catch (error) {
             this.showMessage('Failed to load master files: ' + error.message, 'error');
+        }
+    }
+
+    async loadDashboardData() {
+        try {
+            // Load basic statistics
+            const stats = await this.loadStorageStats();
+
+            // Update dashboard statistics
+            document.getElementById('dashTotalFiles').textContent = stats?.totalFiles || '0';
+            document.getElementById('dashTotalMasterFiles').textContent = stats?.totalMasterFiles || '0';
+            document.getElementById('dashTotalSize').textContent = stats?.totalSize || '0 B';
+
+            // Calculate recent files (this month)
+            const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
+            const recentFilesResult = await window.electronAPI.files.getAll({
+                dateFrom: currentMonth + '-01',
+                limit: 1000
+            });
+            document.getElementById('dashRecentFiles').textContent = recentFilesResult?.pagination?.total || '0';
+
+            // Load master files breakdown
+            await this.loadMasterFileBreakdown();
+
+            // Load recent activity
+            await this.loadRecentActivity();
+
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+            this.showMessage('Failed to load dashboard data: ' + error.message, 'error');
+        }
+    }
+
+    async loadMasterFileBreakdown() {
+        try {
+            const container = document.getElementById('masterFileBreakdown');
+            container.innerHTML = '<div class="loading">Loading master files statistics...</div>';
+
+            const masterFiles = await window.electronAPI.masterFiles.getAllSimple();
+
+            if (masterFiles.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <p>No master files created yet.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Get file counts for each master file
+            const breakdown = await Promise.all(
+                masterFiles.map(async (mf) => {
+                    const result = await window.electronAPI.files.getAll({
+                        masterFileId: mf.id,
+                        limit: 1
+                    });
+                    return {
+                        name: mf.name,
+                        count: result.pagination?.total || 0
+                    };
+                })
+            );
+
+            // Sort by count descending
+            breakdown.sort((a, b) => b.count - a.count);
+
+            container.innerHTML = `
+                <div class="stats-grid">
+                    ${breakdown.slice(0, 4).map(item => `
+                        <div class="stat-card">
+                            <div class="stat-value">${item.count}</div>
+                            <div class="stat-label">${this.escapeHtml(item.name)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                ${breakdown.length > 4 ? `
+                    <div style="margin-top: 15px; font-size: 13px; color: var(--text-secondary);">
+                        And ${breakdown.length - 4} more master files...
+                    </div>
+                ` : ''}
+            `;
+
+        } catch (error) {
+            document.getElementById('masterFileBreakdown').innerHTML = `
+                <div style="color: var(--danger-color); text-align: center;">
+                    Failed to load master files breakdown
+                </div>
+            `;
+        }
+    }
+
+    async loadRecentActivity() {
+        try {
+            const container = document.getElementById('recentActivity');
+            container.innerHTML = '<div class="loading">Loading recent activity...</div>';
+
+            // Get recent files (last 10)
+            const result = await window.electronAPI.files.getAll({
+                limit: 10,
+                page: 1
+            });
+
+            if (!result.data || result.data.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <p>No recent activity.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="max-height: 300px; overflow-y: auto;">
+                    ${result.data.map(file => `
+                        <div style="padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 8px; cursor: pointer;" onclick="app.showFileDetail(${file.id})">
+                            <div style="font-weight: 600; margin-bottom: 4px;">${this.escapeHtml(file.title)}</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                ${file.master_file_name ? `📁 ${this.escapeHtml(file.master_file_name)} • ` : ''}
+                                🕐 ${new Date(file.created_at).toLocaleDateString()}
+                                ${file.reference_number ? ` • Ref: ${this.escapeHtml(file.reference_number)}` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+        } catch (error) {
+            document.getElementById('recentActivity').innerHTML = `
+                <div style="color: var(--danger-color); text-align: center;">
+                    Failed to load recent activity
+                </div>
+            `;
         }
     }
 
@@ -798,8 +950,30 @@ class FileTrackerApp {
         }
 
         // Reset to first page for new search
-        this.pagination.dashboard.page = 1;
-        await this.loadFiles(searchParams, 'dashboard');
+        this.pagination.documents.page = 1;
+
+        try {
+            this.showLoading('filesList');
+
+            const params = {
+                ...searchParams,
+                page: this.pagination.documents.page,
+                limit: this.pagination.documents.limit
+            };
+
+            const result = await window.electronAPI.files.getAll(params);
+
+            // Update pagination state
+            this.pagination.documents = {
+                ...this.pagination.documents,
+                ...result.pagination
+            };
+
+            this.renderFilesList('filesList', result.data);
+            this.renderPagination('documents');
+        } catch (error) {
+            this.showMessage('Failed to search files: ' + error.message, 'error');
+        }
     }
 
     clearSearch() {
@@ -808,9 +982,9 @@ class FileTrackerApp {
         document.getElementById('dateFrom').value = '';
         document.getElementById('dateTo').value = '';
 
-        // Reset to first page
-        this.pagination.dashboard.page = 1;
-        this.loadFiles({}, 'dashboard');
+        // Reset to first page and reload documents
+        this.pagination.documents.page = 1;
+        this.loadDocumentsPage();
     }
 
     // Theme management
@@ -962,10 +1136,10 @@ class FileTrackerApp {
             document.getElementById('globalSearch')?.focus();
         });
         document.getElementById('exportDataMenu')?.addEventListener('click', () => {
-            this.exportData();
+            this.createCompleteBackup();
         });
         document.getElementById('importDataMenu')?.addEventListener('click', () => {
-            this.importData();
+            this.restoreCompleteBackup();
         });
         document.getElementById('exitMenu')?.addEventListener('click', () => {
             window.electronAPI.window.close();
@@ -1020,14 +1194,14 @@ class FileTrackerApp {
                     document.getElementById('globalSearch')?.focus();
                 }
             }
-            // Export/Import shortcuts
+            // Backup/Restore shortcuts
             if (e.ctrlKey && e.key === 'e') {
                 e.preventDefault();
-                this.exportData();
+                this.createCompleteBackup();
             }
             if (e.ctrlKey && e.key === 'i') {
                 e.preventDefault();
-                this.importData();
+                this.restoreCompleteBackup();
             }
             // Theme toggle
             if (e.ctrlKey && e.key === 't') {
@@ -1165,108 +1339,143 @@ class FileTrackerApp {
     async loadStorageStats() {
         try {
             const stats = await window.electronAPI.backup.getStats();
+
+            // Update storage overview stats
             document.getElementById('totalFiles').textContent = stats.totalFiles.toLocaleString();
             document.getElementById('totalSize').textContent = this.formatFileSize(stats.totalSize);
+            document.getElementById('totalMasterFiles').textContent = this.masterFiles.length.toLocaleString();
+
+            // Load last backup date from localStorage
+            const lastBackupDate = localStorage.getItem('lastBackupDate');
+            if (lastBackupDate) {
+                const date = new Date(lastBackupDate);
+                document.getElementById('lastBackup').textContent = date.toLocaleDateString();
+            } else {
+                document.getElementById('lastBackup').textContent = 'Never';
+            }
+
         } catch (error) {
             console.error('Failed to load storage stats:', error);
             document.getElementById('totalFiles').textContent = 'Error';
             document.getElementById('totalSize').textContent = 'Error';
+            document.getElementById('totalMasterFiles').textContent = 'Error';
             this.showMessage('Failed to load storage statistics: ' + error.message, 'error');
         }
     }
 
-    async exportData() {
+    async createCompleteBackup() {
         try {
-            const result = await window.electronAPI.data.export();
-            if (result.success) {
-                this.showMessage(result.message, 'success');
-                this.showResults([{
-                    type: 'success',
-                    message: `Data exported to: ${result.filePath}`
-                }]);
-            } else {
-                this.showMessage(result.message, 'warning');
-            }
-        } catch (error) {
-            console.error('Export failed:', error);
-            this.showMessage('Failed to export data: ' + error.message, 'error');
-        }
-    }
+            // Show loading message
+            this.showMessage('Creating complete backup...', 'info');
 
-    async importData() {
-        const overwrite = document.getElementById('overwriteDataCheck').checked;
-        try {
-            const result = await window.electronAPI.data.import({ overwrite });
-            if (result.success) {
-                this.showMessage(result.message, 'success');
-                const results = [];
-                Object.entries(result.results).forEach(([type, stats]) => {
-                    results.push({
-                        type: stats.errors > 0 ? 'error' : 'success',
-                        message: `${type}: ${stats.imported} imported, ${stats.skipped} skipped, ${stats.errors} errors`
-                    });
-                });
-                this.showResults(results);
-                // Reload data
-                await this.loadFiles();
-                await this.loadMasterFiles();
-            } else {
-                this.showMessage(result.message, 'warning');
-            }
-        } catch (error) {
-            console.error('Import failed:', error);
-            this.showMessage('Failed to import data: ' + error.message, 'error');
-        }
-    }
-
-    async createBackup() {
-        try {
             const result = await window.electronAPI.backup.create();
             if (result.success) {
-                this.showMessage(result.message, 'success');
+                this.showMessage('Complete backup created successfully!', 'success');
                 this.showResults([{
                     type: 'success',
-                    message: `Full backup created: ${result.filePath}`
+                    message: `✓ Backup saved to: ${result.filePath}`
                 }, {
                     type: 'success',
-                    message: `Total size: ${this.formatFileSize(result.totalBytes)}`
+                    message: `✓ Total backup size: ${this.formatFileSize(result.totalBytes)}`
+                }, {
+                    type: 'info',
+                    message: `✓ Includes all documents, database, and settings`
                 }]);
+
+                // Update last backup time
+                document.getElementById('lastBackup').textContent = new Date().toLocaleDateString();
+                localStorage.setItem('lastBackupDate', new Date().toISOString());
+
+                this.loadStorageStats();
             } else {
-                this.showMessage(result.message, 'warning');
+                this.showMessage(result.message, 'error');
             }
         } catch (error) {
-            console.error('Backup failed:', error);
-            this.showMessage('Failed to create backup: ' + error.message, 'error');
+            this.showMessage(`Backup failed: ${error.message}`, 'error');
         }
     }
 
-    async restoreBackup() {
-        const overwrite = document.getElementById('overwriteBackupCheck').checked;
-        if (!confirm('This will restore files from the backup. Are you sure you want to continue?')) {
+    async restoreCompleteBackup() {
+        const overwrite = document.getElementById('overwriteCheck').checked;
+        const createBeforeRestore = document.getElementById('createBeforeRestore').checked;
+
+        const confirmMessage = `This will restore all data from the backup file.${overwrite ? ' All existing data will be replaced.' : ''}\n\nAre you sure you want to continue?`;
+        if (!confirm(confirmMessage)) {
             return;
         }
+
         try {
+            // Create safety backup if requested
+            if (createBeforeRestore) {
+                this.showMessage('Creating safety backup before restore...', 'info');
+                const safetyResult = await window.electronAPI.backup.create();
+                if (safetyResult.success) {
+                    this.showMessage('Safety backup created. Proceeding with restore...', 'info');
+                } else {
+                    if (!confirm('Failed to create safety backup. Continue with restore anyway?')) {
+                        return;
+                    }
+                }
+            }
+
+            this.showMessage('Restoring from backup...', 'info');
+
             const result = await window.electronAPI.backup.restore({ overwrite });
             if (result.success) {
-                this.showMessage(result.message, 'success');
+                this.showMessage('Complete restore successful!', 'success');
                 const results = [];
-                const fileResults = result.results.files;
-                results.push({
-                    type: fileResults.errors > 0 ? 'error' : 'success',
-                    message: `Files: ${fileResults.restored} restored, ${fileResults.skipped} skipped, ${fileResults.errors} errors`
-                });
+
+                if (result.results.files) {
+                    const fileResults = result.results.files;
+                    results.push({
+                        type: 'success',
+                        message: `✓ Files restored: ${fileResults.restored} documents`
+                    });
+                    if (fileResults.skipped > 0) {
+                        results.push({
+                            type: 'warning',
+                            message: `⚠ Files skipped: ${fileResults.skipped} (already exist)`
+                        });
+                    }
+                }
+
+                if (result.results.databaseRestored) {
+                    results.push({
+                        type: 'success',
+                        message: `✓ Database and settings restored`
+                    });
+                } else if (result.results.databaseFound) {
+                    // Look for database.json error in the files array
+                    const dbError = result.results.files.files.find(f => f.filename === 'database.json' && f.status === 'error');
+                    const errorDetail = dbError ? ` - ${dbError.reason}` : '';
+                    results.push({
+                        type: 'error',
+                        message: `⚠ Database found but failed to restore${errorDetail}`
+                    });
+                } else {
+                    results.push({
+                        type: 'info',
+                        message: `ℹ No database found in backup (files-only backup)`
+                    });
+                }
+
                 this.showResults(results);
-                // Reload data
-                await this.loadFiles();
-                await this.loadStorageStats();
+
+                // Refresh all views
+                await this.loadMasterFiles();
+                await this.loadDashboardData();
+                if (this.currentPage === 'documents') {
+                    await this.loadDocumentsPage();
+                }
+                this.loadStorageStats();
             } else {
-                this.showMessage(result.message, 'warning');
+                this.showMessage(result.message, 'error');
             }
         } catch (error) {
-            console.error('Restore failed:', error);
-            this.showMessage('Failed to restore backup: ' + error.message, 'error');
+            this.showMessage(`Restore failed: ${error.message}`, 'error');
         }
     }
+
 
     showResults(results) {
         const resultsSection = document.getElementById('backupResults');

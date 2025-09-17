@@ -290,12 +290,12 @@ ipcMain.handle('files:exportBackup', async (event) => {
 
     if (!result.canceled) {
       // Create a complete backup with both data and files
-      const tempDataPath = path.join(app.getPath('temp'), `export-${Date.now()}.json`);
+      const tempDataPath = path.join(app.getPath('temp'), `database-export-${Date.now()}.json`);
       const exportData = await database.exportData();
       await fs.writeFile(tempDataPath, JSON.stringify(exportData, null, 2));
 
       // Create backup with both database export and files
-      const backupResult = await fileStorage.createBackup(result.filePath);
+      const backupResult = await fileStorage.createBackupWithDatabase(result.filePath, tempDataPath);
 
       // Clean up temp file
       await fs.unlink(tempDataPath);
@@ -329,14 +329,16 @@ ipcMain.handle('files:importBackup', async (event, options = { overwrite: false 
       const backupPath = result.filePaths[0];
 
       // Restore files
-      const fileResults = await fileStorage.restoreBackup(backupPath, options);
+      const fileResults = await fileStorage.restoreBackup(backupPath, options, database);
 
       return {
         success: true,
         results: {
-          files: fileResults
+          files: fileResults,
+          databaseRestored: fileResults.databaseRestored,
+          databaseFound: fileResults.databaseFound
         },
-        message: 'Backup restored successfully'
+        message: 'Complete backup restored successfully'
       };
     }
     return { success: false, message: 'Restore cancelled' };

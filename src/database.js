@@ -568,38 +568,67 @@ class DatabaseManager {
       scans: { imported: 0, skipped: 0, errors: 0 }
     };
 
+    // ID mapping for foreign key relationships
+    const masterFileIdMap = new Map(); // old_id -> new_id
+    const fileIdMap = new Map(); // old_id -> new_id
+
     try {
       // Start transaction
       this.db.run('BEGIN TRANSACTION');
 
-      // Import master files
+      // Clear existing data if overwrite is true
+      if (options.overwrite) {
+        this.db.run('DELETE FROM scans');
+        this.db.run('DELETE FROM files');
+        this.db.run('DELETE FROM master_files');
+        // Reset auto-increment counters
+        this.db.run('DELETE FROM sqlite_sequence WHERE name IN ("master_files", "files", "scans")');
+      }
+
+      // Import master files first
       if (importData.master_files) {
         for (const masterFile of importData.master_files) {
           try {
+            let shouldImport = true;
+            let existingId = null;
+
             if (!options.overwrite) {
               // Check if master file with same name already exists
               const existingStmt = this.db.prepare('SELECT id FROM master_files WHERE name = $name');
               existingStmt.bind({ $name: masterFile.name });
-              const existing = existingStmt.step();
-              existingStmt.free();
-
-              if (existing) {
+              if (existingStmt.step()) {
+                const existing = existingStmt.getAsObject();
+                existingId = existing.id;
+                shouldImport = false;
                 results.master_files.skipped++;
-                continue;
               }
+              existingStmt.free();
             }
 
-            const stmt = this.db.prepare(`
-              INSERT OR REPLACE INTO master_files (name, description, created_at, updated_at)
-              VALUES ($name, $description, $created_at, $updated_at)
-            `);
-            stmt.run({
-              $name: masterFile.name,
-              $description: masterFile.description || '',
-              $created_at: masterFile.created_at,
-              $updated_at: masterFile.updated_at
-            });
-            results.master_files.imported++;
+            if (shouldImport) {
+              const stmt = this.db.prepare(`
+                INSERT INTO master_files (name, description, created_at, updated_at)
+                VALUES ($name, $description, $created_at, $updated_at)
+              `);
+              stmt.run({
+                $name: masterFile.name,
+                $description: masterFile.description || '',
+                $created_at: masterFile.created_at,
+                $updated_at: masterFile.updated_at
+              });
+
+              // Get the new ID
+              const newIdStmt = this.db.prepare('SELECT last_insert_rowid() as id');
+              newIdStmt.step();
+              const newId = newIdStmt.getAsObject().id;
+              newIdStmt.free();
+
+              masterFileIdMap.set(masterFile.id, newId);
+              results.master_files.imported++;
+            } else {
+              // Map existing ID
+              masterFileIdMap.set(masterFile.id, existingId);
+            }
           } catch (error) {
             console.error('Error importing master file:', error);
             results.master_files.errors++;
@@ -607,10 +636,13 @@ class DatabaseManager {
         }
       }
 
-      // Import files
+      // Import files with corrected master_file_id
       if (importData.files) {
         for (const file of importData.files) {
           try {
+            let shouldImport = true;
+            let existingId = null;
+
             if (!options.overwrite) {
               // Check if file with same title and reference number already exists
               const existingStmt = this.db.prepare(
@@ -620,37 +652,54 @@ class DatabaseManager {
                 $title: file.title,
                 $reference_number: file.reference_number || ''
               });
-              const existing = existingStmt.step();
-              existingStmt.free();
-
-              if (existing) {
+              if (existingStmt.step()) {
+                const existing = existingStmt.getAsObject();
+                existingId = existing.id;
+                shouldImport = false;
                 results.files.skipped++;
-                continue;
               }
+              existingStmt.free();
             }
 
-            const stmt = this.db.prepare(`
-              INSERT OR REPLACE INTO files (
-                title, reference_number, description, date_received, date_sent,
-                tags, master_file_id, created_at, updated_at
-              )
-              VALUES (
-                $title, $reference_number, $description, $date_received, $date_sent,
-                $tags, $master_file_id, $created_at, $updated_at
-              )
-            `);
-            stmt.run({
-              $title: file.title,
-              $reference_number: file.reference_number || '',
-              $description: file.description || '',
-              $date_received: file.date_received || '',
-              $date_sent: file.date_sent || '',
-              $tags: file.tags || '',
-              $master_file_id: file.master_file_id,
-              $created_at: file.created_at,
-              $updated_at: file.updated_at
-            });
-            results.files.imported++;
+            if (shouldImport) {
+              // Map the master_file_id to the new ID
+              const mappedMasterFileId = file.master_file_id ?
+                masterFileIdMap.get(file.master_file_id) : null;
+
+              const stmt = this.db.prepare(`
+                INSERT INTO files (
+                  title, reference_number, description, date_received, date_sent,
+                  tags, master_file_id, created_at, updated_at
+                )
+                VALUES (
+                  $title, $reference_number, $description, $date_received, $date_sent,
+                  $tags, $master_file_id, $created_at, $updated_at
+                )
+              `);
+              stmt.run({
+                $title: file.title,
+                $reference_number: file.reference_number || '',
+                $description: file.description || '',
+                $date_received: file.date_received || '',
+                $date_sent: file.date_sent || '',
+                $tags: file.tags || '',
+                $master_file_id: mappedMasterFileId,
+                $created_at: file.created_at,
+                $updated_at: file.updated_at
+              });
+
+              // Get the new ID
+              const newIdStmt = this.db.prepare('SELECT last_insert_rowid() as id');
+              newIdStmt.step();
+              const newId = newIdStmt.getAsObject().id;
+              newIdStmt.free();
+
+              fileIdMap.set(file.id, newId);
+              results.files.imported++;
+            } else {
+              // Map existing ID
+              fileIdMap.set(file.id, existingId);
+            }
           } catch (error) {
             console.error('Error importing file:', error);
             results.files.errors++;
@@ -658,40 +707,50 @@ class DatabaseManager {
         }
       }
 
-      // Import scans metadata (actual files will be handled separately)
+      // Import scans with corrected file_id
       if (importData.scans) {
         for (const scan of importData.scans) {
           try {
+            let shouldImport = true;
+
             if (!options.overwrite) {
               // Check if scan with same filepath already exists
               const existingStmt = this.db.prepare('SELECT id FROM scans WHERE filepath = $filepath');
               existingStmt.bind({ $filepath: scan.filepath });
-              const existing = existingStmt.step();
-              existingStmt.free();
-
-              if (existing) {
+              if (existingStmt.step()) {
+                shouldImport = false;
                 results.scans.skipped++;
-                continue;
               }
+              existingStmt.free();
             }
 
-            const stmt = this.db.prepare(`
-              INSERT OR REPLACE INTO scans (
-                file_id, filename, filepath, mimetype, size, uploaded_at
-              )
-              VALUES (
-                $file_id, $filename, $filepath, $mimetype, $size, $uploaded_at
-              )
-            `);
-            stmt.run({
-              $file_id: scan.file_id,
-              $filename: scan.filename,
-              $filepath: scan.filepath,
-              $mimetype: scan.mimetype,
-              $size: scan.size,
-              $uploaded_at: scan.uploaded_at
-            });
-            results.scans.imported++;
+            if (shouldImport) {
+              // Map the file_id to the new ID
+              const mappedFileId = fileIdMap.get(scan.file_id);
+
+              if (mappedFileId) {
+                const stmt = this.db.prepare(`
+                  INSERT INTO scans (
+                    file_id, filename, filepath, mimetype, size, uploaded_at
+                  )
+                  VALUES (
+                    $file_id, $filename, $filepath, $mimetype, $size, $uploaded_at
+                  )
+                `);
+                stmt.run({
+                  $file_id: mappedFileId,
+                  $filename: scan.filename,
+                  $filepath: scan.filepath,
+                  $mimetype: scan.mimetype,
+                  $size: scan.size,
+                  $uploaded_at: scan.uploaded_at
+                });
+                results.scans.imported++;
+              } else {
+                console.warn(`Skipping scan ${scan.filename} - file ID ${scan.file_id} not found`);
+                results.scans.errors++;
+              }
+            }
           } catch (error) {
             console.error('Error importing scan:', error);
             results.scans.errors++;
