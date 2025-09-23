@@ -45,8 +45,15 @@
       "node_modules/**/*"
     ],
     "win": {
-      "target": "dir",
+      "target": "nsis",
       "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "File Tracker"
     },
     "mac": {
       "target": "dmg",
