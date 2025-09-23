@@ -53,11 +53,23 @@
             transition: background-color 0.3s, color 0.3s;
         }
 
-        /* Ensure interactive elements are clickable */
+        /* Ensure interactive elements are clickable and focusable */
         button, input, select, textarea, .nav-item, .btn {
             position: relative;
             z-index: 1;
+        }
+
+        /* Ensure all form inputs are always focusable */
+        input, select, textarea {
             pointer-events: auto !important;
+            user-select: auto !important;
+            -webkit-user-select: auto !important;
+            -moz-user-select: auto !important;
+            -ms-user-select: auto !important;
+        }
+
+        input:disabled, select:disabled, textarea:disabled {
+            pointer-events: none !important;
         }
 
         .app-container {
@@ -309,6 +321,8 @@
             font-size: 13px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             -webkit-app-region: drag;
+            z-index: 100000;
+            position: relative;
         }
 
         .menu-item {
@@ -318,11 +332,21 @@
             color: var(--text-primary);
             position: relative;
             -webkit-app-region: no-drag;
+            z-index: 100001;
+            pointer-events: auto;
         }
 
         .menu-item:hover {
             background: var(--bg-secondary);
             color: var(--accent-color);
+        }
+
+        .menu-item:hover .menu-dropdown {
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: translateY(0) !important;
+            pointer-events: auto !important;
+            display: block !important;
         }
 
         .menu-item.active {
@@ -339,18 +363,20 @@
             border-radius: 6px;
             min-width: 180px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
+            z-index: 100002;
             opacity: 0;
             visibility: hidden;
             transform: translateY(-10px);
             transition: all 0.3s ease;
+            pointer-events: none;
         }
 
-        .menu-item:hover .menu-dropdown,
         .menu-item.active .menu-dropdown {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: translateY(0) !important;
+            pointer-events: auto !important;
+            display: block !important;
         }
 
         .menu-dropdown-item {
@@ -447,10 +473,8 @@
 
         .content-area {
             flex: 1;
-            overflow: hidden;
             display: flex;
             flex-direction: column;
-            min-height: 0; /* Important for flex scrolling */
             position: relative;
         }
 
@@ -614,8 +638,8 @@
         /* List View */
         .list-container {
             flex: 1;
-            overflow-y: auto;
-            height: 70vh;
+            overflow-y: scroll;
+            max-height: 70vh; 
             padding: 20px 30px;
         }
 

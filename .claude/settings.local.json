@@ -8,7 +8,8 @@
       "Bash(tasklist)",
       "Bash(findstr:*)",
       "Bash(npm run clean:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(set CSC_IDENTITY_AUTO_DISCOVERY=false)"
     ],
     "deny": [],
     "ask": []

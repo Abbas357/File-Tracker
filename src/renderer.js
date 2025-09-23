@@ -637,15 +637,26 @@ class FileTrackerApp {
             'masterFileSelect'
         ];
 
-        formInputs.forEach(inputId => {
-            const element = document.getElementById(inputId);
-            if (element) {
-                element.disabled = false;
-                element.readOnly = false;
-                element.style.pointerEvents = 'auto';
-                element.style.opacity = '1';
-            }
-        });
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+            formInputs.forEach(inputId => {
+                const element = document.getElementById(inputId);
+                if (element) {
+                    element.disabled = false;
+                    element.readOnly = false;
+                    element.style.pointerEvents = 'auto';
+                    element.style.opacity = '1';
+                    element.style.cursor = 'text';
+                    element.tabIndex = 0;
+                    // Remove any existing event listeners that might interfere
+                    element.style.userSelect = 'auto';
+                    element.style.webkitUserSelect = 'auto';
+                    console.log(`Enabled input: ${inputId}`, element);
+                } else {
+                    console.warn(`Element not found: ${inputId}`);
+                }
+            });
+        }, 50);
 
         // Hide upload section for editing
         document.getElementById('uploadSection').style.display = this.isEditing ? 'none' : 'block';
@@ -681,15 +692,25 @@ class FileTrackerApp {
             'masterFileDescInput'
         ];
 
-        formInputs.forEach(inputId => {
-            const element = document.getElementById(inputId);
-            if (element) {
-                element.disabled = false;
-                element.readOnly = false;
-                element.style.pointerEvents = 'auto';
-                element.style.opacity = '1';
-            }
-        });
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+            formInputs.forEach(inputId => {
+                const element = document.getElementById(inputId);
+                if (element) {
+                    element.disabled = false;
+                    element.readOnly = false;
+                    element.style.pointerEvents = 'auto';
+                    element.style.opacity = '1';
+                    element.style.cursor = 'text';
+                    element.tabIndex = 0;
+                    element.style.userSelect = 'auto';
+                    element.style.webkitUserSelect = 'auto';
+                    console.log(`Enabled input: ${inputId}`, element);
+                } else {
+                    console.warn(`Element not found: ${inputId}`);
+                }
+            });
+        }, 50);
 
         if (masterFile) {
             document.getElementById('masterFileNameInput').value = masterFile.name || '';
@@ -1124,53 +1145,123 @@ class FileTrackerApp {
     }
 
     setupMenuBarEvents() {
+        // Get all menu items
+        const menuItems = document.querySelectorAll('.menu-item');
+
+        // Add click handlers to each menu item
+        menuItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                // Skip if clicking on dropdown items
+                if (e.target.closest('.menu-dropdown-item')) {
+                    return;
+                }
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Close all other menus
+                menuItems.forEach(otherItem => {
+                    if (otherItem !== item) {
+                        otherItem.classList.remove('active');
+                    }
+                });
+
+                // Toggle current menu
+                item.classList.toggle('active');
+            });
+        });
+
+        // Close menus when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.menu-item')) {
+                menuItems.forEach(item => {
+                    item.classList.remove('active');
+                });
+            }
+        });
+
+        // Helper function to close all dropdowns
+        const closeAllDropdowns = () => {
+            document.querySelectorAll('.menu-item').forEach(item => {
+                item.classList.remove('active');
+            });
+        };
+
         // File Menu
-        document.getElementById('newFileMenu')?.addEventListener('click', async () => {
+        document.getElementById('newFileMenu')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             await this.navigateToPage('add-file');
         });
-        document.getElementById('newMasterFileMenu')?.addEventListener('click', async () => {
+        document.getElementById('newMasterFileMenu')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             await this.navigateToPage('add-master-file');
         });
-        document.getElementById('openFileMenu')?.addEventListener('click', () => {
+        document.getElementById('openFileMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             // Focus search input
             document.getElementById('globalSearch')?.focus();
         });
-        document.getElementById('exportDataMenu')?.addEventListener('click', () => {
+        document.getElementById('exportDataMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             this.createCompleteBackup();
         });
-        document.getElementById('importDataMenu')?.addEventListener('click', () => {
+        document.getElementById('importDataMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             this.restoreCompleteBackup();
         });
-        document.getElementById('exitMenu')?.addEventListener('click', () => {
+        document.getElementById('exitMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             window.electronAPI.window.close();
         });
 
         // Edit Menu
-        document.getElementById('searchMenu')?.addEventListener('click', () => {
+        document.getElementById('searchMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             document.getElementById('globalSearch')?.focus();
         });
-        document.getElementById('clearSearchMenu')?.addEventListener('click', () => {
+        document.getElementById('clearSearchMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             this.clearSearch();
         });
-        document.getElementById('selectAllMenu')?.addEventListener('click', () => {
+        document.getElementById('selectAllMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             // This would need to be implemented based on current page context
             console.log('Select All not implemented yet');
         });
 
         // View Menu
-        document.getElementById('dashboardViewMenu')?.addEventListener('click', async () => {
+        document.getElementById('dashboardViewMenu')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             await this.navigateToPage('dashboard');
         });
-        document.getElementById('documentsViewMenu')?.addEventListener('click', async () => {
+        document.getElementById('documentsViewMenu')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             await this.navigateToPage('documents');
         });
-        document.getElementById('masterFilesViewMenu')?.addEventListener('click', async () => {
+        document.getElementById('masterFilesViewMenu')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             await this.navigateToPage('master-files');
         });
-        document.getElementById('backupViewMenu')?.addEventListener('click', async () => {
+        document.getElementById('backupViewMenu')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             await this.navigateToPage('backup-restore');
         });
-        document.getElementById('toggleThemeMenu')?.addEventListener('click', () => {
+        document.getElementById('toggleThemeMenu')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllDropdowns();
             this.toggleTheme();
         });
 
@@ -1219,6 +1310,7 @@ class FileTrackerApp {
             }
         });
     }
+
 
     async goToPage(pageType, pageNumber) {
         if (pageNumber < 1 || pageNumber > this.pagination[pageType].totalPages) {
